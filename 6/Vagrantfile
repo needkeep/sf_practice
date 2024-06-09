@@ -1,0 +1,86 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+
+dir = Dir.pwd
+vagrant_dir = File.expand_path(File.dirname(__FILE__))
+
+$vm_box = ENV['BOX'] ? ENV['BOX'] : 'generic/ubuntu1804'
+
+#vm_hostname = 'morsh-vagrant-ubuntu-18-04'
+
+Vagrant.require_version '>= 2.2.0'
+VAGRANTFILE_API_VERSION = '2'.freeze
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+   
+  box_name = $vm_box
+
+    app_servers ={
+
+        'django-test-1' => {
+            :name => 'django-test-1',
+            :ip => '192.168.1.2',
+            :box => box_name,
+            :forwarded_port_guest => 811,
+            :forwarded_port_host => 8811
+        },
+
+        'django-test-2' => {
+            :name => 'django-test-2',
+            :ip => '192.168.1.3',
+            :box => box_name,
+            :forwarded_port_guest => 821,
+            :forwarded_port_host => 8821
+        },
+    }
+   
+    app_servers.each do |key,value|
+        boxname = value[:name]
+
+        config.vm.define boxname do |app_config|
+
+            app_config.vm.provider :virtualbox do |vb|
+               vb.gui = false 
+               vb.name = "#{value[:name]}.morsh-vagrant"
+               if value[:name].include?("django-test-2") then
+                  vb.memory = 4096
+                  vb.cpus = 2
+               else
+                  vb.memory = 4096
+                  vb.cpus = 4   
+               end              
+            end
+
+            app_config.vm.box = value[:box]
+
+            app_config.vm.hostname = "#{value[:name]}.morsh-vagrant"
+
+            app_config.vm.network "private_network", ip: value[:ip]
+
+            app_config.vm.network "forwarded_port", guest: value[:forwarded_port_guest], host: value[:forwarded_port_host]
+      
+
+            app_config.ssh.forward_agent = true
+
+            app_config.vm.provision :file  do |file|
+               file.source = "./django.conf"
+               file.destination = "/tmp/django.conf"
+            end
+
+        
+            app_config.vm.provision :file  do |file|
+               file.source = "./requirements.txt"
+               file.destination = "/tmp/requirements.txt"
+            end
+        
+            app_config.vm.provision :shell do |sh|
+               sh.path = "./install_postgres.sh"
+            end
+
+            app_config.vm.provision :shell do |sh|
+                sh.path = "./install_python3_pip.sh"
+            end
+        end
+    end
+end
